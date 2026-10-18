@@ -28,6 +28,11 @@ func TestNextToken(t *testing.T) {
 	10 == 10
 	5 != 10
 
+	for break continue
+	try catch
+	const
+	&& ||
+
 	`
 
 	tests := []struct {
@@ -114,6 +119,15 @@ func TestNextToken(t *testing.T) {
 		{token.INT, "5"},
 		{token.NotEQ, "!="},
 		{token.INT, "10"},
+
+		{token.FOR, "for"},
+		{token.BREAK, "break"},
+		{token.CONTINUE, "continue"},
+		{token.TRY, "try"},
+		{token.CATCH, "catch"},
+		{token.CONST, "const"},
+		{token.AND, "&&"},
+		{token.OR, "||"},
 
 		{token.EOF, ""},
 	}
