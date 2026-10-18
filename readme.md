@@ -166,7 +166,6 @@ for {
 If you need to break out of the loop or skip one iteration you can use `break` and `continue` keywords.
 
 #### Error Handling
-You know what? F@CK try-catch! But here it is:
 ```js
 try{
 	FuncWithError()
