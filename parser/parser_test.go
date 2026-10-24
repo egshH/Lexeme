@@ -74,3 +74,29 @@ func checkParserErrors(t *testing.T, p *Parser) {
 	}
 	t.FailNow()
 }
+
+func TestReturnStatement(t *testing.T) {
+	input := `
+	return 4;
+	return 5;
+	return 12341;
+	`
+
+	l := lexer.New(input)
+	p := New(l)
+
+	program := p.ParserProgram()
+	checkParserErrors(t, p)
+
+	for _, stmt := range program.Statements {
+		ret, ok := stmt.(*ast.ReturnStatement)
+		if !ok {
+			t.Errorf("stmt is not ReturnStatement, got %T (%+v)", stmt, stmt)
+			continue
+		}
+
+		if ret.TokenLiteral() != "return" {
+			t.Errorf("not a return, got %q", ret.TokenLiteral())
+		}
+	}
+}
