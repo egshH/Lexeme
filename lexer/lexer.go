@@ -130,7 +130,7 @@ func newToken(t token.TokenType, ch byte) token.Token {
 }
 
 func isLetter(ch byte) bool {
-	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z'
+	return ch == '_' || 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z'
 }
 
 func (l *Lexer) readIdent() string {

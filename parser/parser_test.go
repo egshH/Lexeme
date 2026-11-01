@@ -273,3 +273,141 @@ func TestInfixExpressions(t *testing.T) {
 		}
 	}
 }
+
+func parseChapterInput(t *testing.T, input string) *ast.Program {
+	t.Helper()
+	p := New(lexer.New(input))
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+	return program
+}
+
+func TestPrecedence(t *testing.T) {
+	tests := []struct{ input, want string }{
+		{"-a * b", "((-a) * b)"},
+		{"!-a", "(!(-a))"},
+		{"a + b + c", "((a + b) + c)"},
+		{"a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"},
+		{"5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"},
+		{"true == false", "(true == false)"},
+		{"!true == false", "((!true) == false)"},
+		{"1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"},
+		{"-(5 + 5)", "(-(5 + 5))"},
+		{"!(true == true)", "(!(true == true))"},
+		{"a + add(b * c) + d", "((a + add((b * c))) + d)"},
+		{"add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))", "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))"},
+		{"add(a + b + c * d / f + g)", "add((((a + b) + ((c * d) / f)) + g))"},
+		{"fn(x) { x; }(5)(6)", "fn(x)x(5)(6)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := parseChapterInput(t, tt.input).String(); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBindingsAndReturns(t *testing.T) {
+	for _, tt := range []struct {
+		value string
+		want  string
+	}{
+		{"5", "5"}, {"true", "true"}, {"foobar", "foobar"},
+		{"1 + 2 * 3", "(1 + (2 * 3))"}, {"fn(x) { x }", "fn(x)x"},
+	} {
+		for _, ending := range []string{"", ";"} {
+			program := parseChapterInput(t, "let my_value = "+tt.value+ending)
+			stmt := program.Statements[0].(*ast.LetStatement)
+			if stmt.Name.Value != "my_value" || stmt.Value == nil || stmt.Value.String() != tt.want {
+				t.Fatalf("incorrect binding: %+v", stmt)
+			}
+			program = parseChapterInput(t, "return "+tt.value+ending)
+			ret := program.Statements[0].(*ast.ReturnStatement)
+			if ret.ReturnValue == nil || ret.ReturnValue.String() != tt.want {
+				t.Fatalf("incorrect return: %+v", ret)
+			}
+		}
+	}
+}
+
+func TestBooleans(t *testing.T) {
+	for _, input := range []string{"true", "false"} {
+		stmt := parseChapterInput(t, input).Statements[0].(*ast.ExpressionStatement)
+		b, ok := stmt.Expression.(*ast.Boolean)
+		if !ok {
+			t.Fatalf("got %T", stmt.Expression)
+		}
+		if b.Value != (input == "true") || b.TokenLiteral() != input || stmt.TokenLiteral() != input {
+			t.Fatalf("incorrect boolean: %+v", b)
+		}
+	}
+}
+
+func TestIfElse(t *testing.T) {
+	for _, alternative := range []string{"", " else { y }"} {
+		stmt := parseChapterInput(t, "if (x < y) { x }"+alternative).Statements[0].(*ast.ExpressionStatement)
+		exp, ok := stmt.Expression.(*ast.IfExpression)
+		if !ok {
+			t.Fatalf("got %T", stmt.Expression)
+		}
+		if exp.TokenLiteral() != "if" || exp.Condition.String() != "(x < y)" || len(exp.Consequence.Statements) != 1 || exp.Consequence.String() != "x" {
+			t.Fatalf("incorrect conditional: %+v", exp)
+		}
+		if alternative == "" {
+			if exp.Alternative != nil {
+				t.Fatal("unexpected alternative")
+			}
+		} else if exp.Alternative == nil || exp.Alternative.String() != "y" {
+			t.Fatal("missing alternative")
+		}
+	}
+}
+
+func TestFunctionAndCall(t *testing.T) {
+	for _, tt := range []struct {
+		input  string
+		params []string
+	}{
+		{"fn() {}", nil}, {"fn(x) { x }", []string{"x"}}, {"fn(x, y, z) { x + y + z }", []string{"x", "y", "z"}},
+	} {
+		exp := parseChapterInput(t, tt.input).Statements[0].(*ast.ExpressionStatement).Expression.(*ast.FunctionLiteral)
+		if exp.TokenLiteral() != "fn" || len(exp.Parameters) != len(tt.params) {
+			t.Fatal("incorrect function parameters")
+		}
+		for i, name := range tt.params {
+			if exp.Parameters[i].Value != name || exp.Parameters[i].TokenLiteral() != name {
+				t.Fatal("incorrect parameter")
+			}
+		}
+	}
+	exp := parseChapterInput(t, "add(1, 2 * 3, 4 + 5)").Statements[0].(*ast.ExpressionStatement).Expression.(*ast.CallExpression)
+	if exp.Function.(*ast.Identifier).Value != "add" || len(exp.Arguments) != 3 {
+		t.Fatal("incorrect call")
+	}
+	for i, want := range []string{"1", "(2 * 3)", "(4 + 5)"} {
+		if exp.Arguments[i].String() != want {
+			t.Fatalf("argument %d", i)
+		}
+	}
+	empty := parseChapterInput(t, "add()").Statements[0].(*ast.ExpressionStatement).Expression.(*ast.CallExpression)
+	if len(empty.Arguments) != 0 {
+		t.Fatal("unexpected arguments")
+	}
+	program := parseChapterInput(t, "let add = fn(x, y) { if (x < y) { return x } else { return y } }; add(1, 2)")
+	if len(program.Statements) != 2 {
+		t.Fatal("incorrect program length")
+	}
+}
+
+func TestInvalidSyntax(t *testing.T) {
+	for _, input := range []string{"let x =", "return", "(1 + 2", "if (true) { 1", "fn(x) { x", "fn(1) {}", "fn(x,) {}", "add(1,)", "add(1", "if true { 1 }", "if (true) { 1 } else 2", "1 && 2", "for (true) {}", "const x = 1"} {
+		t.Run(input, func(t *testing.T) {
+			p := New(lexer.New(input))
+			p.ParseProgram()
+			if len(p.Errors()) == 0 {
+				t.Fatal("expected parser error")
+			}
+		})
+	}
+}
