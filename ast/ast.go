@@ -2,6 +2,8 @@ package ast
 
 import (
 	"bytes"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/egshH/Lexeme/token"
@@ -239,4 +241,235 @@ func (ce *CallExpression) String() string {
 		args = append(args, a.String())
 	}
 	return ce.Function.String() + "(" + strings.Join(args, ", ") + ")"
+}
+
+type AssignExpression struct {
+	Token    token.Token
+	Left     Expression
+	Right    Expression
+	Operator string
+}
+
+func (a *AssignExpression) expressionNode()      {}
+func (a *AssignExpression) TokenLiteral() string { return a.Token.Literal }
+func (a *AssignExpression) String() string {
+	var out bytes.Buffer
+
+	out.WriteString(a.Left.String())
+	out.WriteString(a.Operator)
+	out.WriteString(a.Right.String())
+
+	return out.String()
+}
+
+type ForStatement struct {
+	Token     token.Token
+	Condition Expression
+	Body      *BlockStatement
+}
+
+func (f *ForStatement) statementNode()       {}
+func (f *ForStatement) TokenLiteral() string { return f.Token.Literal }
+func (f *ForStatement) String() string {
+	var out bytes.Buffer
+
+	out.WriteString("for (")
+	out.WriteString(f.Condition.String())
+	out.WriteString(") {")
+
+	for _, stmt := range f.Body.Statements {
+		out.WriteString(stmt.String())
+	}
+
+	out.WriteString("}")
+
+	return out.String()
+}
+
+type ForRangeStatement struct {
+	Token    token.Token
+	Iterator *Identifier
+	Begin    Expression
+	End      Expression
+	Body     *BlockStatement
+}
+
+func (fr *ForRangeStatement) statementNode()       {}
+func (fr *ForRangeStatement) TokenLiteral() string { return fr.Token.Literal }
+func (fr *ForRangeStatement) String() string {
+	var out bytes.Buffer
+
+	out.WriteString("for (range ")
+	out.WriteString(fr.Iterator.String())
+	out.WriteString(" ")
+	out.WriteString(fr.Begin.String())
+	out.WriteString("..")
+	out.WriteString(fr.End.String())
+	out.WriteString(") {")
+	out.WriteString(fr.Body.String())
+	out.WriteString("}")
+
+	return out.String()
+}
+
+type BreakStatement struct {
+	Token token.Token
+}
+
+func (b *BreakStatement) statementNode()       {}
+func (b *BreakStatement) TokenLiteral() string { return b.Token.Literal }
+func (b *BreakStatement) String() string       { return b.Token.Literal }
+
+type ContinueStatement struct {
+	Token token.Token
+}
+
+func (c *ContinueStatement) statementNode()       {}
+func (c *ContinueStatement) TokenLiteral() string { return c.Token.Literal }
+func (c *ContinueStatement) String() string       { return c.Token.Literal }
+
+type ConstStatement struct {
+	Token token.Token
+	Name  *Identifier
+	Value Expression
+}
+
+func (cs *ConstStatement) statementNode()       {}
+func (cs *ConstStatement) TokenLiteral() string { return cs.Token.Literal }
+func (cs *ConstStatement) String() string {
+	var out bytes.Buffer
+
+	out.WriteString(cs.TokenLiteral())
+	out.WriteString(" ")
+	out.WriteString(cs.Name.String())
+	out.WriteString(" = ")
+	if cs.Value != nil {
+		out.WriteString(cs.Value.String())
+	}
+	out.WriteString(";")
+
+	return out.String()
+}
+
+type StringLiteral struct {
+	Token token.Token
+	Value string
+}
+
+func (s *StringLiteral) expressionNode()      {}
+func (s *StringLiteral) TokenLiteral() string { return s.Token.Literal }
+func (s *StringLiteral) String() string       { return s.Token.Literal }
+
+type ArrayLiteral struct {
+	Token    token.Token
+	Elements []Expression
+}
+
+func (al *ArrayLiteral) expressionNode()      {}
+func (al *ArrayLiteral) TokenLiteral() string { return al.Token.Literal }
+func (al *ArrayLiteral) String() string {
+	var out bytes.Buffer
+
+	elements := []string{}
+	for _, e := range al.Elements {
+		elements = append(elements, e.String())
+	}
+
+	out.WriteString("[")
+	out.WriteString(strings.Join(elements, ", "))
+	out.WriteString("]")
+
+	return out.String()
+}
+
+type IndexExpression struct {
+	Token token.Token
+	Left  Expression
+	Index Expression
+}
+
+func (ie *IndexExpression) expressionNode()      {}
+func (ie *IndexExpression) TokenLiteral() string { return ie.Token.Literal }
+func (ie *IndexExpression) String() string {
+	var out bytes.Buffer
+
+	out.WriteString("(")
+	out.WriteString(ie.Left.String())
+	out.WriteString("[")
+	out.WriteString(ie.Index.String())
+	out.WriteString("]")
+	out.WriteString(")")
+
+	return out.String()
+}
+
+type HashLiteral struct {
+	Token token.Token // '{'
+	Pairs map[Expression]Expression
+}
+
+func (h *HashLiteral) expressionNode()      {}
+func (h *HashLiteral) TokenLiteral() string { return h.Token.Literal }
+func (h *HashLiteral) String() string {
+	var out bytes.Buffer
+
+	pairs := []string{}
+	for key, value := range h.Pairs {
+		pairs = append(pairs, fmt.Sprintf("%s:%s", key.String(), value.String()))
+	}
+
+	sort.Strings(pairs)
+	out.WriteString("{")
+	out.WriteString(strings.Join(pairs, ", "))
+	out.WriteString("}")
+
+	return out.String()
+}
+
+type TryStatement struct {
+	Token       token.Token
+	Body        *BlockStatement
+	ErrorIdent  *Identifier
+	Consequence *BlockStatement
+}
+
+func (t *TryStatement) statementNode()       {}
+func (t *TryStatement) TokenLiteral() string { return t.Token.Literal }
+func (t *TryStatement) String() string {
+	var out bytes.Buffer
+
+	out.WriteString("try {")
+	for _, stmt := range t.Body.Statements {
+		out.WriteString(stmt.String())
+	}
+	out.WriteString("}")
+
+	if t.Consequence != nil {
+		out.WriteString("catch(" + t.ErrorIdent.String() + "){")
+		for _, stmt := range t.Consequence.Statements {
+			out.WriteString(stmt.String())
+		}
+		out.WriteString("}")
+	}
+
+	return out.String()
+}
+
+type PostfixExpression struct {
+	Token    token.Token // the prefix token, line ! or -
+	Operator string
+	Left     Expression
+}
+
+func (px *PostfixExpression) expressionNode()      {}
+func (px *PostfixExpression) TokenLiteral() string { return px.Token.Literal }
+func (px *PostfixExpression) String() string {
+	var out bytes.Buffer
+
+	out.WriteString("(")
+	out.WriteString(px.Left.String())
+	out.WriteString(px.Operator)
+	out.WriteString(")")
+
+	return out.String()
 }

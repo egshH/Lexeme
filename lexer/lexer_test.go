@@ -146,3 +146,32 @@ func TestNextToken(t *testing.T) {
 		}
 	}
 }
+
+func TestExtendedTokens(t *testing.T) {
+	l := New("// comment\nitem2 += 09; item2--; a++ >= b <= c -= 1; [\"a\\\"b\\\\c\\n\"]: {} // eof")
+	expected := []token.Token{
+		{Type: token.IDENT, Literal: "item2"}, {Type: token.PLUS_ASSIGN, Literal: "+="}, {Type: token.INT, Literal: "09"}, {Type: token.SEMICOLON, Literal: ";"},
+		{Type: token.IDENT, Literal: "item2"}, {Type: token.DECREMENT, Literal: "--"}, {Type: token.SEMICOLON, Literal: ";"},
+		{Type: token.IDENT, Literal: "a"}, {Type: token.INCREMENT, Literal: "++"}, {Type: token.GT_EQ, Literal: ">="}, {Type: token.IDENT, Literal: "b"},
+		{Type: token.LT_EQ, Literal: "<="}, {Type: token.IDENT, Literal: "c"}, {Type: token.MINUS_ASSIGN, Literal: "-="}, {Type: token.INT, Literal: "1"}, {Type: token.SEMICOLON, Literal: ";"},
+		{Type: token.LBRACKET, Literal: "["}, {Type: token.STRING, Literal: "a\"b\\c\n"}, {Type: token.RBRACKET, Literal: "]"}, {Type: token.COLON, Literal: ":"},
+		{Type: token.LBRACE, Literal: "{"}, {Type: token.RBRACE, Literal: "}"}, {Type: token.EOF, Literal: ""},
+	}
+	for i, want := range expected {
+		if got := l.NextToken(); got != want {
+			t.Fatalf("token %d: got %+v, want %+v", i, got, want)
+		}
+	}
+}
+
+func TestInvalidStrings(t *testing.T) {
+	for _, input := range []string{"\"unfinished", "\"unfinished\\", `"bad\q"`} {
+		l := New(input)
+		if got := l.NextToken(); got.Type != token.ILLEGAL {
+			t.Fatalf("%q: got %+v", input, got)
+		}
+		if got := l.NextToken(); got.Type != token.EOF {
+			t.Fatalf("expected EOF, got %+v", got)
+		}
+	}
+}

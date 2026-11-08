@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/egshH/Lexeme/ast"
@@ -401,7 +402,7 @@ func TestFunctionAndCall(t *testing.T) {
 }
 
 func TestInvalidSyntax(t *testing.T) {
-	for _, input := range []string{"let x =", "return", "(1 + 2", "if (true) { 1", "fn(x) { x", "fn(1) {}", "fn(x,) {}", "add(1,)", "add(1", "if true { 1 }", "if (true) { 1 } else 2", "1 && 2", "for (true) {}", "const x = 1"} {
+	for _, input := range []string{"let x =", "return", "(1 + 2", "if (true) { 1", "fn(x) { x", "fn(1) {}", "fn(x,) {}", "add(1,)", "add(1", "if true { 1 }", "if (true) { 1 } else 2"} {
 		t.Run(input, func(t *testing.T) {
 			p := New(lexer.New(input))
 			p.ParseProgram()
@@ -410,4 +411,123 @@ func TestInvalidSyntax(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParsingAssignment(t *testing.T) {
+	input := "let a = 4; a = 5;"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	for _, stmt := range program.Statements {
+		t.Log(stmt.String())
+	}
+}
+
+func TestForStatement(t *testing.T) {
+	input := "for (1 != 2) { print(2) }\nfor (range i 0..5) { if (i == 2) { break; } continue;  }"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	for _, stmt := range program.Statements {
+		t.Log(stmt.String())
+	}
+}
+
+func TestTryStatement(t *testing.T) {
+	input := "try { print(1/0) }"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	for _, stmt := range program.Statements {
+		t.Log(stmt.String())
+	}
+}
+
+func TestAllSyntax(t *testing.T) {
+	for _, tt := range []struct{ input, want string }{
+		{`const x = [1, 2 * 3, fn(a) { return; }];`, `const x = [1, (2 * 3), fn(a)return ;];`},
+		{`a = b = 1 + 2`, `a=b=(1 + 2)`},
+		{`a += 1 + 2 * 3`, `a+=(1 + (2 * 3))`},
+		{`a -= b || c && d == e`, `a-=(b || (c && (d == e)))`},
+		{`a[1 + 2] = f()[0]`, `(a[(1 + 2)])=(f()[0])`},
+		{`a[0]++ + b-- * 2`, `(((a[0])++) + ((b--) * 2))`},
+		{`1 <= 2 && 3 >= 2 || false`, `(((1 <= 2) && (3 >= 2)) || false)`},
+		{`[]; {};`, `[]{}`},
+		{`{"z": [2], "a": 1}`, `{a:1, z:[2]}`},
+		{`for {} for (true) {} for (range i 1 + 2..f(5)) { continue; break; }`, `for (true) {}for (true) {}for (range i (1 + 2)..f(5)) {continuebreak}`},
+		{`try { f() } catch(err) { print(err) }`, `try {f()}catch(err){print(err)}`},
+		{`try {} // trailing comment`, `try {}`},
+		{`let item2 = 09; item2`, `let item2 = 09;item2`},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program := parseChapterInput(t, tt.input)
+			if got := program.String(); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompletedAST(t *testing.T) {
+	program := parseChapterInput(t, `const data = {"items": [1, "hello\n\"world\"\\"]}; for {} try {} catch(e) {} for (range i 0..2) {}`)
+	binding := program.Statements[0].(*ast.ConstStatement)
+	hash := binding.Value.(*ast.HashLiteral)
+	if binding.Name.Value != "data" || hash.TokenLiteral() != "{" || len(hash.Pairs) != 1 {
+		t.Fatal("invalid constant/hash AST")
+	}
+	for key, value := range hash.Pairs {
+		if key.(*ast.StringLiteral).Value != "items" {
+			t.Fatal("invalid hash key")
+		}
+		array := value.(*ast.ArrayLiteral)
+		if array.TokenLiteral() != "[" || len(array.Elements) != 2 || array.Elements[1].(*ast.StringLiteral).Value != "hello\n\"world\"\\" {
+			t.Fatal("invalid array/string AST")
+		}
+	}
+	loop := program.Statements[1].(*ast.ForStatement)
+	if loop.TokenLiteral() != "for" || !loop.Condition.(*ast.Boolean).Value || loop.Condition.TokenLiteral() != "true" {
+		t.Fatal("invalid loop AST")
+	}
+	tr := program.Statements[2].(*ast.TryStatement)
+	if tr.TokenLiteral() != "try" || tr.ErrorIdent.Value != "e" || tr.Consequence == nil {
+		t.Fatal("invalid try AST")
+	}
+	r := program.Statements[3].(*ast.ForRangeStatement)
+	if r.Iterator.Value != "i" || r.Begin.(*ast.IntegerLiteral).Value != 0 || r.End.(*ast.IntegerLiteral).Value != 2 {
+		t.Fatal("invalid range AST")
+	}
+}
+
+func TestCompletedSyntaxErrors(t *testing.T) {
+	for _, input := range []string{
+		`for (range 1 0..5) {}`, `for (range i 0 5) {}`, `for (range i ..5) {}`, `for (true)`, `for {`,
+		`try`, `try {`, `try {} catch {}`, `try {} catch(1) {}`, `try {} catch(e)`,
+		`const x`, `const x =`, `const 1 = 2`, `[1,]`, `[1`, `a[]`, `a[1`, `{"a" 1}`, `{"a":}`, `{"a": 1`,
+		`1 = 2`, `(a + b) += 2`, `1++`, `f()--`, `"unterminated`, `"bad\q"`,
+	} {
+		t.Run(input, func(t *testing.T) {
+			p := New(lexer.New(input))
+			p.ParseProgram()
+			if len(p.Errors()) == 0 {
+				t.Fatal("expected syntax error")
+			}
+		})
+	}
+}
+
+func TestExampleParses(t *testing.T) {
+	input, err := os.ReadFile("../example/guess.lex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parseChapterInput(t, string(input))
 }

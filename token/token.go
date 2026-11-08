@@ -11,8 +11,18 @@ const (
 	ILLEGAL = "ILLEGAL"
 	EOF     = "EOF"
 
-	IDENT = "IDENT"
-	INT   = "INT"
+	IDENT        = "IDENT"
+	INT          = "INT"
+	STRING       = "STRING"
+	COLON        = ":"
+	LBRACKET     = "["
+	RBRACKET     = "]"
+	LT_EQ        = "<="
+	GT_EQ        = ">="
+	PLUS_ASSIGN  = "+="
+	MINUS_ASSIGN = "-="
+	INCREMENT    = "++"
+	DECREMENT    = "--"
 
 	// Operators
 	ASSIGN   = "="
@@ -21,6 +31,7 @@ const (
 	BANG     = "!"
 	ASTERISK = "*"
 	SLASH    = "/"
+	DOTDOT   = ".."
 
 	LT    = "<" // less then
 	GT    = ">" // greater then
@@ -48,6 +59,7 @@ const (
 	FALSE    = "FALSE"
 	RETURN   = "RETURN"
 	FOR      = "FOR"
+	RANGE    = "RANGE"
 	BREAK    = "BREAK"
 	CONTINUE = "CONTINUE"
 	TRY      = "TRY"
@@ -64,6 +76,7 @@ var keywords = map[string]TokenType{
 	"false":    FALSE,
 	"return":   RETURN,
 	"for":      FOR,
+	"range":    RANGE,
 	"break":    BREAK,
 	"continue": CONTINUE,
 	"try":      TRY,

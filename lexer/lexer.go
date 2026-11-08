@@ -2,6 +2,7 @@ package lexer
 
 import (
 	"github.com/egshH/Lexeme/token"
+	"strings"
 )
 
 type Lexer struct {
@@ -48,9 +49,25 @@ func (l *Lexer) skipWhitespace() {
 func (l *Lexer) NextToken() token.Token {
 	var tok token.Token
 
-	l.skipWhitespace()
+	for {
+		l.skipWhitespace()
+		if l.ch != '/' || l.peekChar() != '/' {
+			break
+		}
+		for l.ch != 0 && l.ch != '\n' && l.ch != '\r' {
+			l.readChar()
+		}
+	}
 
 	switch l.ch {
+	case '.':
+		if l.peekChar() == '.' {
+			l.readChar()
+			tok.Type = token.DOTDOT
+			tok.Literal = ".."
+		} else {
+			tok = newToken(token.ILLEGAL, l.ch)
+		}
 	case '=':
 		if l.peekChar() == '=' {
 			ch := l.ch
@@ -60,9 +77,25 @@ func (l *Lexer) NextToken() token.Token {
 			tok = newToken(token.ASSIGN, l.ch)
 		}
 	case '+':
-		tok = newToken(token.PLUS, l.ch)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.PLUS_ASSIGN, Literal: "+="}
+		} else if l.peekChar() == '+' {
+			l.readChar()
+			tok = token.Token{Type: token.INCREMENT, Literal: "++"}
+		} else {
+			tok = newToken(token.PLUS, l.ch)
+		}
 	case '-':
-		tok = newToken(token.MINUS, l.ch)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.MINUS_ASSIGN, Literal: "-="}
+		} else if l.peekChar() == '-' {
+			l.readChar()
+			tok = token.Token{Type: token.DECREMENT, Literal: "--"}
+		} else {
+			tok = newToken(token.MINUS, l.ch)
+		}
 	case '/':
 		tok = newToken(token.SLASH, l.ch)
 	case '*':
@@ -89,9 +122,19 @@ func (l *Lexer) NextToken() token.Token {
 			tok = newToken(token.ILLEGAL, l.ch)
 		}
 	case '<':
-		tok = newToken(token.LT, l.ch)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.LT_EQ, Literal: "<="}
+		} else {
+			tok = newToken(token.LT, l.ch)
+		}
 	case '>':
-		tok = newToken(token.GT, l.ch)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.GT_EQ, Literal: ">="}
+		} else {
+			tok = newToken(token.GT, l.ch)
+		}
 	case '(':
 		tok = newToken(token.LPAREN, l.ch)
 	case ')':
@@ -104,6 +147,19 @@ func (l *Lexer) NextToken() token.Token {
 		tok = newToken(token.SEMICOLON, l.ch)
 	case ',':
 		tok = newToken(token.COMMA, l.ch)
+	case '[':
+		tok = newToken(token.LBRACKET, l.ch)
+	case ']':
+		tok = newToken(token.RBRACKET, l.ch)
+	case ':':
+		tok = newToken(token.COLON, l.ch)
+	case '"':
+		tok.Type = token.STRING
+		var ok bool
+		tok.Literal, ok = l.readString()
+		if !ok {
+			tok.Type = token.ILLEGAL
+		}
 	case 0:
 		tok.Literal = ""
 		tok.Type = token.EOF
@@ -135,7 +191,7 @@ func isLetter(ch byte) bool {
 
 func (l *Lexer) readIdent() string {
 	pos := l.position
-	for isLetter(l.ch) {
+	for isLetter(l.ch) || isDigit(l.ch) {
 		l.readChar()
 	}
 
@@ -153,4 +209,48 @@ func (l *Lexer) readNumber() string {
 	}
 
 	return l.input[pos:l.position]
+}
+
+// readString decodes escapes and reports unterminated or invalid strings.
+func (l *Lexer) readString() (string, bool) {
+	var out strings.Builder
+	valid := true
+	for {
+		l.readChar()
+		if l.ch == 0 {
+			return out.String(), false
+		}
+		if l.ch == '"' {
+			return out.String(), valid
+		}
+		if l.ch != '\\' {
+			out.WriteByte(l.ch)
+			continue
+		}
+		l.readChar()
+		switch l.ch {
+		case 0:
+			return out.String(), false
+		case 'n':
+			out.WriteByte('\n')
+		case 'r':
+			out.WriteByte('\r')
+		case 't':
+			out.WriteByte('\t')
+		case 'b':
+			out.WriteByte('\b')
+		case 'a':
+			out.WriteByte('\a')
+		case 'f':
+			out.WriteByte('\f')
+		case 'v':
+			out.WriteByte('\v')
+		case 'e':
+			out.WriteByte(27)
+		case '"', '\\':
+			out.WriteByte(l.ch)
+		default:
+			valid = false
+		}
+	}
 }
