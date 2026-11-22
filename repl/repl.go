@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/egshH/Lexeme/evaluator"
 	"github.com/egshH/Lexeme/lexer"
+	"github.com/egshH/Lexeme/object"
 	"github.com/egshH/Lexeme/parser"
 )
 
@@ -13,6 +15,7 @@ const prompt = ">> "
 
 func Start(in io.Reader, out io.Writer) {
 	scanner := bufio.NewScanner(in)
+	env := object.NewEnvironment()
 	if scanner.Err() != nil {
 		panic(scanner.Err())
 	}
@@ -33,7 +36,9 @@ func Start(in io.Reader, out io.Writer) {
 			printParserErrors(out, p.Errors())
 			continue
 		}
-		fmt.Fprintln(out, program.String())
+		if evaluated := evaluator.Eval(program, env); evaluated != nil {
+			fmt.Fprintln(out, evaluated.Inspect())
+		}
 	}
 }
 
